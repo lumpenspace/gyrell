@@ -1,0 +1,34 @@
+site_name: GyReLL
+site_description: "gyre's RL environment for ludic learning"
+site_url: https://lumpenspace.github.io/gyrell/
+repo_url: https://github.com/lumpenspace/gyrell
+theme:
+  name: material
+  logo: assets/favicon.svg
+  favicon: assets/favicon.svg
+  palette:
+    scheme: slate
+    primary: black
+    accent: amber
+  features:
+    - navigation.sections
+    - content.code.copy
+extra_css:
+  - stylesheets/puxel.css
+markdown_extensions:
+  - admonition
+  - tables
+  - def_list
+  - pymdownx.superfences
+nav:
+  - Home: index.md
+  - Guide:
+      - Build a game: guide/build-a-game.md
+      - Seat the players: guide/actors.md
+      - Run evals: guide/evals.md
+      - Train on it: guide/rl-environment.md
+      - Put it on TV: guide/broadcast.md
+  - Examples:
+      - codewords: examples/codewords.md
+      - taboo: examples/taboo.md
+  - Prime Intellect: prime-intellect.md

@@ -1,0 +1,38 @@
+# FREE pipeline validation on the $0 sprints model. Exercises: env v0.1.11,
+# PI-inference adversary from hosted containers (PRIME_API_KEY forwarding),
+# extra_body reasoning-off, eval.sampling, ladder-style mixed pool.
+# Run before every paid launch:
+#   export PRIME_API_KEY=$(python3 -c "import json,os; print(json.load(open(os.path.expanduser('~/.prime/config.json')))['api_key'])")
+#   prime train configs/codewords-dryrun-free.toml -e PRIME_API_KEY -y
+
+model = "sprints/Llama-3.2-1B-Instruct"
+loss = "rl"
+max_steps = 3
+
+batch_size = 8
+rollouts_per_example = 8
+
+[sampling]
+max_tokens = 400
+temperature = 0.7
+
+[[env]]
+id = "lumpenspace/gyrell"
+args = { role = "team", max_turns = 20, num_train_examples = 100, num_eval_examples = 10, opponent = [
+  { model = "deepseek/deepseek-v4-flash", base_url = "https://api.pinference.ai/api/v1", api_key_var = "PRIME_API_KEY", extra_body = '{"reasoning": {"enabled": false}}' },
+] }
+
+[eval]
+interval = 1000  # only the pre-training eval fires
+num_examples = 2
+rollouts_per_example = 1
+
+[eval.sampling]
+max_tokens = 400
+temperature = 0.7
+
+[[eval.env]]
+id = "lumpenspace/gyrell"
+args = { role = "team", max_turns = 20, num_train_examples = 100, num_eval_examples = 10, opponent = [
+  { model = "deepseek/deepseek-v4-flash", base_url = "https://api.pinference.ai/api/v1", api_key_var = "PRIME_API_KEY", extra_body = '{"reasoning": {"enabled": false}}' },
+] }

@@ -1,0 +1,121 @@
+/* gyrell docs wear puxel — the brutalist-retro design system the LUDICA
+   client is built from. Hard borders, offset shadows, pixel display font. */
+
+@import url("https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap");
+
+:root {
+  --px-bg: #0f1115;
+  --px-surface: #1a1d24;
+  --px-surface-2: #242833;
+  --px-ink: #f2f0e9;
+  --px-ink-muted: #9a938a;
+  --px-accent: #ffd23f;
+  --px-accent-2: #ff6b35;
+  --px-danger: #ef3e36;
+  --px-info: #2d7ff9;
+  --px-border-w: 3px;
+  --px-font-display: "Press Start 2P", "Courier New", monospace;
+}
+
+[data-md-color-scheme="slate"] {
+  --md-default-bg-color: var(--px-bg);
+  --md-default-fg-color: var(--px-ink);
+  --md-primary-fg-color: var(--px-bg);
+  --md-accent-fg-color: var(--px-accent-2);
+  --md-typeset-a-color: var(--px-accent);
+  --md-code-bg-color: var(--px-surface);
+}
+
+.md-typeset a {
+  color: var(--px-accent);
+}
+
+.md-typeset a:hover {
+  color: var(--px-accent-2);
+}
+
+/* pixel display font for the wordmark and headings */
+.md-header__topic,
+.md-typeset h1,
+.md-typeset h2 {
+  font-family: var(--px-font-display);
+  letter-spacing: 0;
+  line-height: 1.6;
+}
+
+.md-typeset h1 {
+  font-size: 1.5rem;
+  color: var(--px-ink);
+}
+
+.md-typeset h2 {
+  font-size: 1rem;
+  color: var(--px-accent);
+}
+
+.md-typeset h3 {
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-size: 0.85rem;
+  color: var(--px-ink-muted);
+}
+
+/* puxel cards: hard border + offset shadow, no radius anywhere */
+.md-typeset pre,
+.md-typeset .admonition,
+.md-typeset details,
+.md-typeset table:not([class]) {
+  border: var(--px-border-w) solid var(--px-ink) !important;
+  border-radius: 0 !important;
+  box-shadow: 6px 6px 0 0 rgba(0, 0, 0, 0.55) !important;
+  background: var(--px-surface);
+}
+
+.md-typeset code {
+  border-radius: 0;
+  background: var(--px-surface-2);
+}
+
+.md-typeset .admonition-title {
+  background: var(--px-accent) !important;
+  color: #16130d !important;
+  font-family: var(--px-font-display);
+  font-size: 0.62rem;
+}
+
+.md-typeset table:not([class]) th {
+  background: var(--px-surface-2);
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.md-header,
+.md-tabs {
+  background: var(--px-surface);
+  border-bottom: var(--px-border-w) solid var(--px-ink);
+}
+
+.md-nav__item .md-nav__link--active {
+  color: var(--px-accent-2);
+  font-weight: 800;
+}
+
+/* buttons read as px-btn */
+.md-typeset .md-button {
+  border: var(--px-border-w) solid var(--px-ink);
+  border-radius: 0;
+  box-shadow: 4px 4px 0 0 rgba(0, 0, 0, 0.55);
+  background: var(--px-accent);
+  color: #16130d;
+  font-weight: 800;
+}
+
+.md-typeset .md-button:hover {
+  transform: translate(-1px, -1px);
+  box-shadow: 5px 5px 0 0 rgba(0, 0, 0, 0.55);
+  background: var(--px-accent-2);
+  border-color: var(--px-ink);
+  color: #16130d;
+}

@@ -1,0 +1,22 @@
+[project]
+name = "gyrell"
+description = "Turn-game RL environments on the turngames kernel. Ships codewords (Codenames-style hidden-information game): the policy plays a whole team (cluegiver + guesser seats with private per-seat conversations) against configurable opponents."
+tags = ["game", "multi-turn", "hidden-information", "train", "eval"]
+version = "0.2.1"
+requires-python = ">=3.11"
+dependencies = [
+    "verifiers>=0.1.14",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+# turngames/ is a vendored snapshot of ../../src/turngames (the canonical game
+# engine). Refresh it with ./sync_engine.sh after any engine change.
+[tool.hatch.build]
+include = ["gyrell.py", "turngames/**/*.py", "pyproject.toml", "README.md"]
+
+[tool.verifiers.eval]
+num_examples = 5
+rollouts_per_example = 2

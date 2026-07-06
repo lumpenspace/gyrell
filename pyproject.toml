@@ -1,0 +1,17 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "gyrell"
+version = "0.2.0"
+description = "gyre's RL environment for ludic learning: a turn-based game kernel, broadcast server, and verifiers environments for LLM play."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = []
+
+[project.optional-dependencies]
+server = ["fastapi", "uvicorn[standard]"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/turngames"]

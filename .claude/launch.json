@@ -1,0 +1,12 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "server",
+      "runtimeExecutable": "sh",
+      "runtimeArgs": ["-c", "INTERMISSION_SECONDS=30 .venv/bin/uvicorn server.main:app --port ${PORT:-8000}"],
+      "port": 8000,
+      "autoPort": true
+    }
+  ]
+}

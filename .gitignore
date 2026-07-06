@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+*.egg-info/
+build/
+dist/
+
+# Local env & secrets (keep .env.example tracked)
+.env
+.env.local
+
+# Runtime match data — only the demo replay is tracked
+replays/*
+!replays/demo-codewords.jsonl.gz
+
+# Environment build outputs
+environments/*/outputs/
+environments/*/.prime/
+
+# Docs site build
+site/
+
+# Firebase deploy cache
+.firebase/
+
+# Claude Code worktrees
+.claude/worktrees/
+
+# OS / editor
+.DS_Store

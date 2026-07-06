@@ -1,0 +1,40 @@
+# Minimal warm-start run whose only purpose is the pre-training eval pass:
+# scores an existing checkpoint against the live OpenRouter cross-play pool
+# with correct sampling. (~$1: one tiny train step + 16 eval games.)
+#
+# Usage: set checkpoint_id, then
+#   prime train configs/codewords-eval-checkpoint.toml -e OPENROUTER_API_KEY
+
+model = "Qwen/Qwen2.5-3B-Instruct"
+loss = "rl"
+max_steps = 51
+batch_size = 8
+rollouts_per_example = 8
+checkpoint_id = "xtx1sak10dwkqwt6bod641fm"  # run ifit7au7... step 50
+
+[sampling]
+max_tokens = 400
+temperature = 0.7
+enable_thinking = false
+
+[[env]]
+id = "lumpenspace/gyrell"
+args = { role = "team", opponent = "policy", max_turns = 40, num_train_examples = 4000, num_eval_examples = 200 }
+
+[eval]
+interval = 51        # fires once, right at the resume point
+num_examples = 16
+rollouts_per_example = 1
+
+[eval.sampling]
+max_tokens = 400
+temperature = 0.7
+enable_thinking = false
+
+[[eval.env]]
+id = "lumpenspace/gyrell"
+args = { role = "cluegiver", max_turns = 40, num_train_examples = 4000, num_eval_examples = 200, partner = [
+  { model = "openai/gpt-4o-mini" },
+  { model = "anthropic/claude-3.5-haiku" },
+  { model = "google/gemini-2.0-flash-lite" }
+], opponent = "scripted" }
