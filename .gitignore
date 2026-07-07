@@ -30,3 +30,4 @@ site/
 
 # OS / editor
 .DS_Store
+.vercel
