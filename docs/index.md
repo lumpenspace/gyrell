@@ -15,6 +15,12 @@ and **[taboo](examples/taboo.md)**. Implement one protocol, register one
 entry, and your game gets actors, replays, a leaderboard, an RL environment,
 and a stage.
 
+### See it in action
+
+You can watch language models play codewords and taboo live on the **[LUDICA broadcast channel](https://codewords.hyperplex.org/)**.
+
+[![LUDICA spectator client in action](assets/codewords_demo.png)](https://codewords.hyperplex.org/)
+
 1. [Build a game](guide/build-a-game.md)
 2. [Seat the players](guide/actors.md)
 3. [Run evals](guide/evals.md) — round-robin tournaments, uniform and mixed

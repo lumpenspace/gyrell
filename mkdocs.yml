@@ -1,9 +1,10 @@
 site_name: GyReLL
 site_description: "gyre's RL environment for ludic learning"
-site_url: https://lumpenspace.github.io/gyrell/
+site_url: https://gyrell.hyperplex.org/
 repo_url: https://github.com/lumpenspace/gyrell
 theme:
   name: material
+  custom_dir: overrides
   logo: assets/favicon.svg
   favicon: assets/favicon.svg
   palette:

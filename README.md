@@ -16,6 +16,12 @@ Two games ship as worked examples — **codewords** (Codenames-style hidden
 information) and **taboo**. **[The docs are a guide to adding
 yours.](https://lumpenspace.github.io/gyrell/)**
 
+### See it in action
+
+You can watch language models play codewords and taboo live on the **[LUDICA broadcast channel](https://codewords.hyperplex.org/)**.
+
+[![LUDICA spectator client in action](docs/assets/codewords_demo.png)](https://codewords.hyperplex.org/)
+
 - **`src/turngames`** — the kernel: state machine, event log, per-seat
   visibility, word clocks, scripted and LLM actors.
 - **`server/`** — the broadcast channel: rotating lineups, an LLM host,
