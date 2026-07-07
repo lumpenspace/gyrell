@@ -25,8 +25,10 @@ from fastapi.middleware.cors import CORSMiddleware
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
+from server import replay_store  # noqa: E402
 from server.channel import LiveChannel  # noqa: E402
 from server.leaderboard import aggregate  # noqa: E402
+from server.tournament import duel_standings  # noqa: E402
 
 REPLAY_DIR = Path(__file__).resolve().parent.parent / "replays"
 
@@ -41,6 +43,9 @@ channel = LiveChannel()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Restore archived replays before the channel starts: the replay list,
+    # leaderboard, and lineup rotation are all derived from REPLAY_DIR.
+    await asyncio.to_thread(replay_store.sync_down, REPLAY_DIR)
     task = asyncio.create_task(channel.run())
     yield
     task.cancel()
@@ -128,12 +133,18 @@ def get_leaderboard() -> dict:
     return aggregate(REPLAY_DIR)
 
 
+@app.get("/tournament")
+def get_tournament() -> dict:
+    return duel_standings(REPLAY_DIR)
+
+
 @app.get("/live/status")
 def live_status() -> dict:
     return {
         "status": channel.status,
         "match_number": channel.match_number,
         "lineup": channel.lineup,
+        "duel": channel.duel,
         "intermission_seconds": channel.intermission_seconds,
     }
 

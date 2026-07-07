@@ -24,8 +24,10 @@ from turngames.actors.llm import REASONING_OVERRIDES
 from turngames.core import ActorInput, StateMachine
 from turngames.registry import GAMES
 
+from server import replay_store
 from server.host import LLMHost
 from server.leaderboard import matches_played
+from server.tournament import duel_counts
 
 REPLAY_DIR = Path(__file__).resolve().parent.parent / "replays"
 SNAPSHOT_VIEWERS = ("spoiler_safe", "audience_omniscient")
@@ -33,6 +35,11 @@ SNAPSHOT_VIEWERS = ("spoiler_safe", "audience_omniscient")
 INTERMISSION_SECONDS = int(os.environ.get("INTERMISSION_SECONDS", "300"))
 SECONDS_PER_DELIBERATION_WORD = 0.22
 SECONDS_PER_EVENT = 0.9
+
+# Every Nth match is a head-to-head *duel*: three copies of one model on red
+# versus three of another on blue (a pure model-vs-model showdown that feeds the
+# tournament ladder). Override with DUEL_EVERY=0 to disable duels entirely.
+DUEL_EVERY = int(os.environ.get("DUEL_EVERY", "3"))
 
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")
 
@@ -56,7 +63,11 @@ DEFAULT_MODEL_ROSTER = (
     "meta-llama/llama-3.3-70b-instruct",
     "mistralai/mistral-small-3.2-24b-instruct",
     "deepseek/deepseek-chat-v3.1",
-    "qwen/qwen-2.5-72b-instruct",
+    "x-ai/grok-4-fast",
+    # qwen-2.5-72b-instruct is delisted from every working OpenRouter
+    # provider (DeepInfra rate-limited upstream, Novita 400s the endpoint),
+    # so every seat it played fell back to baseline canned lines.
+    "qwen/qwen3.6-27b",
     "z-ai/glm-4.6",
     # Benched for now: laguna thinks 4-5k tokens per turn and ignores every
     # reasoning cap, so under show-pace budgets it mostly plays as its
@@ -150,6 +161,32 @@ def lineup_for_match(
     return dict(zip(seat_ids, picks))
 
 
+def is_duel_match(match_number: int) -> bool:
+    """Whether this match is a head-to-head tournament duel."""
+    return DUEL_EVERY > 0 and match_number % DUEL_EVERY == 0
+
+
+def duel_pairing(match_number: int, fought: dict[str, int] | None = None) -> tuple[str, str]:
+    """The two models (full slugs) for a duel: the least-fought pair, so the
+    ladder fills in evenly, with a random tiebreak seeded by the match number.
+    `fought` maps model label -> duels played (see server.tournament.duel_counts).
+    Deterministic given (match_number, fought)."""
+    counts = fought or {}
+    rng = random.Random(f"duel-{match_number}")
+    roster = list(dict.fromkeys(ROSTER))  # de-dup, keep order
+    rng.shuffle(roster)  # random tiebreak among equal counts
+    roster.sort(key=lambda slug: counts.get(slug.split("/")[-1], 0))
+    if len(roster) < 2:  # degenerate roster — duel a model against itself
+        only = roster[0] if roster else next(iter(ROSTER))
+        return only, only
+    return roster[0], roster[1]
+
+
+def duel_lineup(seat_ids: tuple[str, ...], slug_a: str, slug_b: str) -> dict[str, str]:
+    """Seat a duel: every red seat is model A, every blue seat is model B."""
+    return {sid: (slug_a if sid.startswith("red") else slug_b) for sid in seat_ids}
+
+
 @dataclass(eq=False)  # identity hash so subscribers can live in a set
 class Subscriber:
     queue: asyncio.Queue
@@ -164,6 +201,8 @@ class LiveChannel:
     status: str = "starting"
     game_id: str = GAME_MODES[0]
     lineup: dict[str, str] = field(default_factory=dict)
+    # When the current/next match is a duel: {"a": labelA, "b": labelB}; else None.
+    duel: dict[str, str] | None = None
     _slugs: dict[str, str] = field(default_factory=dict)
     # Catch-up state for late joiners: meta + latest snapshot per viewer.
     _meta: dict | None = None
@@ -212,16 +251,26 @@ class LiveChannel:
                 "match_number": self.match_number,
                 "game": self.game_id,
                 "lineup": self.lineup,
+                "duel": self.duel,
                 "seconds_left": seconds_left,
             }
         )
 
     def _set_lineup(self, match_number: int) -> None:
         # Full slugs drive the actors; stage/leaderboard labels are the tails.
-        # Bias seating toward the least-played models (fair rotation).
         self.game_id = game_for_match(match_number)
         seat_ids = GAMES[self.game_id].seat_ids
-        self._slugs = lineup_for_match(match_number, seat_ids, matches_played(REPLAY_DIR))
+        if is_duel_match(match_number):
+            # A head-to-head duel: least-fought pair, three copies each side.
+            slug_a, slug_b = duel_pairing(match_number, duel_counts(REPLAY_DIR))
+            self._slugs = duel_lineup(seat_ids, slug_a, slug_b)
+            self.duel = {"a": slug_a.split("/")[-1], "b": slug_b.split("/")[-1]}
+        else:
+            # Normal mixed match; bias seating toward the least-played models.
+            self._slugs = lineup_for_match(
+                match_number, seat_ids, matches_played(REPLAY_DIR)
+            )
+            self.duel = None
         self.lineup = {
             seat: slug.split("/")[-1] for seat, slug in self._slugs.items()
         }
@@ -420,9 +469,13 @@ class LiveChannel:
             if text:
                 await host_says(text)
         role_specs = spec.role_specs()
-        archive: list[dict] = [
-            {"kind": "meta", "game_id": spec.id, "seed": seed, "live": True}
-        ]
+        meta_record: dict = {"kind": "meta", "game_id": spec.id, "seed": seed, "live": True}
+        if self.duel:
+            # Tag the archive so the tournament ladder can find its duels, and
+            # the client can flag the match as a head-to-head.
+            meta_record["match_kind"] = "duel"
+            meta_record["duel"] = dict(self.duel)
+        archive: list[dict] = [meta_record]
         self._broadcast(archive[0])
 
         # Per-turn diagnostics (reasoning traces, raw responses, fallback
@@ -447,10 +500,22 @@ class LiveChannel:
             self._broadcast(record)
 
         # Open the show: the host welcomes the crowd and introduces the lineup.
-        await host_comments(
-            "match open — welcome the crowd and introduce tonight's models by team and role",
-            host_rng.choice(HOST_START_LINES),
-        )
+        # A duel gets its own headline — same model three-a-side, winner takes
+        # the ladder point.
+        if self.duel:
+            a_name, b_name = self.duel["a"], self.duel["b"]
+            await host_comments(
+                "tournament duel — announce tonight's head-to-head: three copies of "
+                f"{a_name} on RED versus three copies of {b_name} on BLUE, a pure "
+                "model-vs-model showdown for the ladder. Hype it up.",
+                f"Tournament time! Three {a_name} versus three {b_name} — "
+                "same model, both sides. May the best one win!",
+            )
+        else:
+            await host_comments(
+                "match open — welcome the crowd and introduce tonight's models by team and role",
+                host_rng.choice(HOST_START_LINES),
+            )
 
         clues_seen = 0
         while not spec.is_terminal(machine.state):
@@ -688,11 +753,15 @@ class LiveChannel:
                 ):
                     continue
                 f.write(json.dumps(record) + "\n")
+        uploads = [path]
         # Thinking traces live beside the replay, not in it: they are
         # diagnostics for humans, and RL rollouts must never see them.
         if traces:
             trace_dir = REPLAY_DIR / "traces"
             trace_dir.mkdir(parents=True, exist_ok=True)
-            with gzip.open(trace_dir / f"{seed}.jsonl.gz", "wt") as f:
+            trace_path = trace_dir / f"{seed}.jsonl.gz"
+            with gzip.open(trace_path, "wt") as f:
                 for trace in traces:
                     f.write(json.dumps(trace) + "\n")
+            uploads.append(trace_path)
+        replay_store.upload_async(REPLAY_DIR, *uploads)
