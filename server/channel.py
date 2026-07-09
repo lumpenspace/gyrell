@@ -63,7 +63,9 @@ DEFAULT_MODEL_ROSTER = (
     "meta-llama/llama-3.3-70b-instruct",
     "mistralai/mistral-small-3.2-24b-instruct",
     "deepseek/deepseek-chat-v3.1",
-    "x-ai/grok-4-fast",
+    # grok-4-fast was deprecated by OpenRouter (404s every call, seat plays
+    # as baseline); xAI's recommended replacement.
+    "x-ai/grok-4.3",
     # qwen-2.5-72b-instruct is delisted from every working OpenRouter
     # provider (DeepInfra rate-limited upstream, Novita 400s the endpoint),
     # so every seat it played fell back to baseline canned lines.
@@ -204,10 +206,14 @@ class LiveChannel:
     # When the current/next match is a duel: {"a": labelA, "b": labelB}; else None.
     duel: dict[str, str] | None = None
     _slugs: dict[str, str] = field(default_factory=dict)
-    # Catch-up state for late joiners: meta + latest snapshot per viewer.
+    # Catch-up state for late joiners: meta + latest snapshot per viewer, plus
+    # the match's table-talk backlog (event/host records and turn-boundary
+    # snapshots) so a mid-game join sees the whole log, not just the board.
     _meta: dict | None = None
     _latest_snapshots: dict[str, dict] = field(default_factory=dict)
     _channel_msg: dict = field(default_factory=dict)
+    _backlogs: dict[str, list] = field(default_factory=dict)
+    _backlog_turns: dict[str, object] = field(default_factory=dict)
 
     def subscribe(self, viewer: str) -> Subscriber:
         sub = Subscriber(queue=asyncio.Queue(maxsize=500), viewer=viewer)
@@ -215,6 +221,12 @@ class LiveChannel:
         # Catch the new client up to the current picture.
         if self._meta is not None:
             sub.queue.put_nowait(self._meta)
+        backlog = self._backlogs.get(viewer)
+        if backlog:
+            # One message, folded client-side through the same reducer as the
+            # live stream — the feed lands exactly where a from-the-start
+            # viewer's would, without replaying sounds or animations.
+            sub.queue.put_nowait({"kind": "backlog", "records": list(backlog)})
         snapshot = self._latest_snapshots.get(viewer)
         if snapshot is not None:
             sub.queue.put_nowait(snapshot)
@@ -229,10 +241,23 @@ class LiveChannel:
         if record["kind"] == "meta":
             self._meta = record
             self._latest_snapshots = {}
+            self._backlogs = {}
+            self._backlog_turns = {}
         elif record["kind"] == "snapshot":
             self._latest_snapshots[record["viewer"]] = record
+            # The backlog keeps only turn-boundary snapshots: they're what the
+            # client folds into "Turn N" separators, and dropping the rest
+            # (~86% of stream bytes) keeps the catch-up message small.
+            viewer = record["viewer"]
+            turn = record["view"].get("turn_number")
+            if self._backlog_turns.get(viewer) != turn:
+                self._backlog_turns[viewer] = turn
+                self._backlogs.setdefault(viewer, []).append(record)
         elif record["kind"] == "channel":
             self._channel_msg = record
+        elif record["kind"] in ("event", "host"):
+            for viewer in SNAPSHOT_VIEWERS:
+                self._backlogs.setdefault(viewer, []).append(record)
 
         for sub in tuple(self.subscribers):
             if record["kind"] == "snapshot" and record["viewer"] != sub.viewer:
@@ -588,10 +613,14 @@ class LiveChannel:
                     ),
                 }
             )
-            if ruling.is_legal:
-                illegal_streak[seat_id] = 0
-            else:
+            # Only severity-"error" rulings (malformed or confused play) count
+            # toward the baseline hand-off. A foul — a taboo buzz — is a
+            # coherent move the rules punish; benching the model for it turned
+            # every buzz-heavy stretch into canned baseline lines.
+            if not ruling.is_legal and ruling.severity == "error":
                 illegal_streak[seat_id] = illegal_streak.get(seat_id, 0) + 1
+            else:
+                illegal_streak[seat_id] = 0
 
             delay = SECONDS_PER_EVENT
             clue_given = False
@@ -635,9 +664,15 @@ class LiveChannel:
                     card_won = dict(event.payload)
                 elif event.type == "round_ended":
                     round_over = True
-            for record in snapshot_records():
-                archive.append(record)
-                self._broadcast(record)
+            # A buzz is a turnover (the round ends with the foul). Hold the
+            # scene: the snapshot is what flips the stage to the other team,
+            # so it waits until the buzz pop has played and the host has
+            # called it — the handoff happens after the beat, not under it.
+            hold_scene = fouled and round_over
+            if not hold_scene:
+                for record in snapshot_records():
+                    archive.append(record)
+                    self._broadcast(record)
             await asyncio.sleep(delay)
 
             # The host reacts to what just happened. The match-over sign-off
@@ -646,6 +681,15 @@ class LiveChannel:
                 clues_seen += 1
             if spec.is_terminal(machine.state):
                 pass
+            elif fouled and round_over:
+                await host_comments(
+                    "BUZZ — the describer tripped on a forbidden word, and the "
+                    "buzz ends the round: call the foul with a light touch and "
+                    f"hand the floor to the {machine.state.current_team.upper()} "
+                    "team",
+                    f"BUZZ! That ends the round — "
+                    f"{machine.state.current_team.upper()}, the floor is yours.",
+                )
             elif fouled:
                 await host_comments(
                     "foul — a model just broke a rule (in Taboo: said a forbidden "
@@ -708,6 +752,12 @@ class LiveChannel:
                         team=machine.state.current_team.upper()
                     ),
                 )
+
+            # The held scene flips now: pop played, foul called, floor across.
+            if hold_scene:
+                for record in snapshot_records():
+                    archive.append(record)
+                    self._broadcast(record)
 
         if spec.is_terminal(machine.state):
             winner = machine.state.winner
