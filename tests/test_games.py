@@ -173,3 +173,24 @@ def test_scripted_lineups_are_hidden(tmp_path):
     result = games.search(tmp_path)
     assert result["total"] == 0
     assert result["models"] == []
+
+
+def test_pagination(tmp_path):
+    for n in range(1, 26):
+        _write(
+            tmp_path,
+            _replay(
+                f"live-{600 + n}-1",
+                "codewords",
+                _seats(["grok"], ["gpt"]),
+                {"winner": "red", "terminal_reason": "all_team_words_revealed",
+                 "red_remaining": 0, "blue_remaining": 3, "event_count": 10},
+            ),
+        )
+    first = games.search(tmp_path)
+    assert first["total"] == 25
+    assert len(first["games"]) == 10  # default page size
+    second = games.search(tmp_path, offset=10)
+    assert second["offset"] == 10
+    assert second["games"][0]["name"] != first["games"][0]["name"]
+    assert len(games.search(tmp_path, offset=20)["games"]) == 5

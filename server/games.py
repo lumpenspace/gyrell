@@ -217,7 +217,8 @@ def search(
     team: str | None = None,  # "same" | "mixed", composition of `model`'s team
     moment: str | None = None,
     word: str | None = None,
-    limit: int = 50,
+    limit: int = 10,
+    offset: int = 0,
 ) -> dict:
     """Filter the archive. All filters AND together; `team` and
     `winner_model` are interpreted relative to `model` when one is given."""
@@ -263,11 +264,14 @@ def search(
     models = sorted({m for card in cards for members in card["teams"].values() for m in members})
     # The whole archive's vocabulary feeds the search box's autocomplete.
     words = sorted({w for card in cards for w in card["words"]})
+    start = max(0, offset)
+    page = kept[start : start + max(1, min(limit, 100))]
     return {
         "total": len(kept),
+        "offset": start,
         "games": [
             {key: value for key, value in card.items() if key not in ("order", "words")}
-            for card in kept[: max(1, min(limit, 200))]
+            for card in page
         ],
         "models": models,
         "moments": MOMENTS,

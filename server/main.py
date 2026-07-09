@@ -147,7 +147,8 @@ def get_games(
     team: str | None = None,
     moment: str | None = None,
     word: str | None = None,
-    limit: int = 50,
+    limit: int = 10,
+    offset: int = 0,
 ) -> dict:
     return games.search(
         REPLAY_DIR,
@@ -159,6 +160,7 @@ def get_games(
         moment=moment,
         word=word,
         limit=limit,
+        offset=offset,
     )
 
 
