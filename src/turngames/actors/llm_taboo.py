@@ -27,7 +27,8 @@ RULES_COMMON = (
     "describing team holds it and talks teammates into saying the TARGET "
     "word. THE CARD ONLY BINDS ITS HOLDER: if the describer says the target, "
     "any part or form of it, or any forbidden word (or a form of one), "
-    "that's a BUZZ — card lost, point to the other team. Clueing the word's "
+    "that's a BUZZ — card lost, point to the other team, and YOUR TEAM'S "
+    "ROUND ENDS on the spot (the floor crosses over). Clueing the word's "
     "FORM is also a buzz: no letter counts, no 'starts with', no 'rhymes "
     "with', no initials or spelling — describe the MEANING. Guessers are "
     "free: forbidden words don't apply to them, and if the target crosses a "
@@ -73,6 +74,9 @@ def build_taboo_messages(
         f"Round {data.get('round_number')} of {data.get('total_rounds')} — "
         f"describing team: {data.get('current_team')}.",
         f"Points: {data.get('points')}. Violations: {data.get('violations')}.",
+        f"Card #{(data.get('cards_played') or 0) + 1} is in play. Every "
+        "earlier card is DEAD (guessed, buzzed or skipped) — table talk "
+        "about it is history, not a lead on this card.",
     ]
     card = data.get("current_card")
     if card:
@@ -83,7 +87,18 @@ def build_taboo_messages(
         )
     hints = data.get("current_hints") or []
     if hints:
-        state_lines.append("Hints so far: " + " | ".join(hints))
+        state_lines.append("Hints for THIS card so far: " + " | ".join(hints))
+    elif not describing:
+        state_lines.append(
+            "No hints yet for this card — wait for the describer before "
+            "committing to a guess."
+        )
+    wrong = data.get("wrong_guesses_this_card") or []
+    if wrong:
+        state_lines.append(
+            "Already guessed on THIS card, all wrong — do NOT repeat: "
+            + ", ".join(wrong)
+        )
     if data.get("time_left") is not None:
         state_lines.append(
             f"WORD CLOCK: {data['time_left']} of {data.get('time_limit')} words "

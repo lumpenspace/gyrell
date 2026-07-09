@@ -193,6 +193,63 @@ class TabooFlowTest(unittest.TestCase):
         self.assertNotEqual(machine.state.current_card().target, target)
         self.assertEqual(rewards[-1].value, -1.0)
 
+    def test_buzz_is_a_turnover_and_resets_per_card_state(self) -> None:
+        machine = self.new_machine(rounds_per_team=2)
+        forbidden = machine.state.current_card().forbidden[0]
+        machine.submit("red_player_1", Action.of("describe"), public_deliberation="hm")
+        machine.submit(
+            "red_player_2", Action.of("guess", word="nope"), public_deliberation=""
+        )
+        self.assertEqual(machine.state.current_hints, ("hm",))
+        self.assertEqual(machine.state.wrong_guesses, ("nope",))
+        ruling, _ = machine.submit(
+            "red_player_1",
+            Action.of("describe"),
+            public_deliberation=f"it is covered in {forbidden}",
+        )
+        self.assertFalse(ruling.is_legal)
+        # A buzz is a foul, not a malformed response — runners key off this.
+        self.assertEqual(ruling.severity, "foul")
+        # The dead card takes its hints and wrong guesses with it, the round
+        # ends with the foul, and the floor crosses to the other team.
+        self.assertEqual(machine.state.current_hints, ())
+        self.assertEqual(machine.state.wrong_guesses, ())
+        self.assertEqual(machine.state.awaiting, "describe")
+        self.assertEqual(machine.state.current_team, BLUE)
+        self.assertEqual(machine.state.round_number, 2)
+        self.assertEqual(machine.spec.acting_seat(machine.state), "blue_player_1")
+        self.assertIn("round_ended", [e.type for e in machine.log.events])
+
+    def test_buzz_on_the_last_round_ends_the_game(self) -> None:
+        machine = self.new_machine(words_per_participant=6)
+        target = machine.state.current_card().target
+        machine.submit("red_player_1", Action.of("describe"), public_deliberation="go")
+        machine.submit(
+            "red_player_2", Action.of("guess", word=target), public_deliberation=""
+        )
+        self.burn_describer(machine, "red_player_1")
+        # blue's (final) round: a buzz ends it — and with it, the game.
+        forbidden = machine.state.current_card().forbidden[0]
+        machine.submit(
+            "blue_player_1",
+            Action.of("describe"),
+            public_deliberation=f"it is covered in {forbidden}",
+        )
+        self.assertTrue(machine.spec.is_terminal(machine.state))
+        # red scored a card and takes the violation point too: 2-0.
+        self.assertEqual(machine.score()["winner"], RED)
+
+    def test_wrong_guesses_surface_in_views(self) -> None:
+        machine = self.new_machine()
+        machine.submit("red_player_1", Action.of("describe"), public_deliberation="hm")
+        machine.submit(
+            "red_player_2", Action.of("guess", word="nope"), public_deliberation=""
+        )
+        view = machine.spec.observe_viewer(machine.state, "audience_omniscient")
+        self.assertEqual(view["wrong_guesses_this_card"], ["nope"])
+        observation = machine.observe("red_player_3")
+        self.assertEqual(observation.data["wrong_guesses_this_card"], ["nope"])
+
     def test_spelling_hint_is_a_buzz(self) -> None:
         machine = self.new_machine()
         target = machine.state.current_card().target

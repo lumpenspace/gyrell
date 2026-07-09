@@ -80,6 +80,9 @@ class TabooState:
     # Everything the describer has legally said about the current card, in
     # order — guessers (and the audience) work from these.
     current_hints: tuple[str, ...] = ()
+    # Formal guesses already ruled wrong on the current card — surfaced to
+    # guessers so they don't retread them. Dies with the card.
+    wrong_guesses: tuple[str, ...] = ()
     # Per-seat word clocks for the describing team's current round.
     speech_left: dict[str, int] = field(default_factory=dict)
     # How many rounds each team has completed — also the describer rotation

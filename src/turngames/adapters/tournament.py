@@ -277,7 +277,13 @@ def play_match(
                     ),
                 }
             )
-            illegal_streak[seat_id] = 0 if ruling.is_legal else illegal_streak.get(seat_id, 0) + 1
+            # Fouls (severity "foul", e.g. a taboo buzz) are coherent play,
+            # not a stuck model — only "error" rulings feed the streak.
+            illegal_streak[seat_id] = (
+                illegal_streak.get(seat_id, 0) + 1
+                if not ruling.is_legal and ruling.severity == "error"
+                else 0
+            )
             for event in machine.log.events[event_start:]:
                 if "audience" not in event.visibility:
                     continue

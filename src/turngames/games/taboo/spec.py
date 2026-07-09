@@ -178,11 +178,13 @@ class TabooSpec:
                     "toward the target — saying the target or any forbidden "
                     "word (or a form of them) is a buzz, and so are spelling "
                     "clues (letter counts, 'starts with', rhymes, initials). "
-                    "The card only binds its holder: guessers may say "
-                    "anything, and the target crossing a guesser's lips "
-                    "counts even mid-sentence. Everyone has a personal word "
-                    "clock per round; the round ends when the describer's "
-                    "runs dry."
+                    "A buzz is a turnover: point to the other team AND the "
+                    "round ends on the spot, floor across. The card only "
+                    "binds its holder: guessers may say anything, and the "
+                    "target crossing a guesser's lips counts even "
+                    "mid-sentence. Everyone has a personal word clock per "
+                    "round; the round also ends when the describer's runs "
+                    "dry."
                 ),
                 action_schemas=(
                     ActionSchema(
@@ -272,6 +274,7 @@ class TabooSpec:
             "skips_this_round": state.skips_this_round,
             "max_skips_per_round": state.config.max_skips_per_round,
             "current_hints": list(state.current_hints),
+            "wrong_guesses_this_card": list(state.wrong_guesses),
             "awaiting": state.awaiting,
             "describer": describer,
             "winner": state.winner,
@@ -383,16 +386,21 @@ class TabooSpec:
         if state.awaiting == AWAIT_DESCRIBE:
             if action.type == "describe":
                 tripped = find_taboo_word(state.last_utterance, state.current_card())
+                # A buzz is severity "foul": legal-shaped play the rules punish,
+                # not a malformed response — runners must not treat it as a
+                # sign of a stuck model (see the illegal-streak fallbacks).
                 if tripped is not None:
                     return Ruling.illegal(
                         "taboo_violation",
                         f"BUZZ — said a form of '{tripped}'.",
+                        severity="foul",
                     )
                 hint = find_spelling_hint(state.last_utterance)
                 if hint is not None:
                     return Ruling.illegal(
                         "spelling_hint",
                         f"BUZZ — no spelling clues ('{hint}').",
+                        severity="foul",
                     )
                 return Ruling.legal("legal_describe", "Description is clean.")
             if action.type == "skip":
@@ -486,7 +494,12 @@ class TabooSpec:
             if spoken_hit:
                 return self._card_won(state, seat_id, card, next_cursor, via="spoken")
             return StepTransition(
-                replace(state, awaiting=AWAIT_DESCRIBE, guess_cursor=next_cursor),
+                replace(
+                    state,
+                    awaiting=AWAIT_DESCRIBE,
+                    guess_cursor=next_cursor,
+                    wrong_guesses=(*state.wrong_guesses, word),
+                ),
                 (
                     EventRecord(
                         "guess_incorrect",
@@ -551,7 +564,9 @@ class TabooSpec:
             # carried this action; nothing to punish.
             return StepTransition(state)
         if ruling.rule_id in ("taboo_violation", "spelling_hint"):
-            # Both are a buzz: card lost, point across, foul on the record.
+            # Both are a buzz: card lost, point across, foul on the record —
+            # and a TURNOVER: the fouling team's round ends on the spot and
+            # the floor crosses to the other team.
             card = state.current_card()
             tripped = (
                 find_taboo_word(state.last_utterance, card)
@@ -564,12 +579,8 @@ class TabooSpec:
                 points[other] += 1
             violations = dict(state.violations)
             violations[state.current_team] += 1
-            next_state = replace(
-                self._discard_card(state),
-                points=points,
-                violations=violations,
-            )
-            events = (
+            state = replace(state, points=points, violations=violations)
+            events = [
                 EventRecord(
                     "taboo_violation",
                     {
@@ -581,7 +592,7 @@ class TabooSpec:
                     },
                     visibility=("replay", "audience"),
                 ),
-            )
+            ]
             rewards = (
                 Reward(
                     seat_id=seat_id,
@@ -590,7 +601,8 @@ class TabooSpec:
                     metadata={"said": tripped},
                 ),
             )
-            return StepTransition(next_state, events, rewards)
+            transition = self._round_end_transition(state, events)
+            return StepTransition(transition.state, transition.events, rewards)
         events = (
             EventRecord(
                 "illegal_action_applied",
@@ -638,6 +650,7 @@ class TabooSpec:
             card_cursor=state.card_cursor + 1,
             cards_played=state.cards_played + 1,
             current_hints=(),
+            wrong_guesses=(),
             awaiting=AWAIT_DESCRIBE,
         )
 
