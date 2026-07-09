@@ -25,7 +25,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
-from server import replay_store  # noqa: E402
+from server import games, replay_store  # noqa: E402
 from server.channel import LiveChannel  # noqa: E402
 from server.leaderboard import aggregate  # noqa: E402
 from server.tournament import duel_standings  # noqa: E402
@@ -126,6 +126,40 @@ def record_delay(record: dict) -> float:
 @app.get("/replays")
 def get_replays() -> dict:
     return {"replays": list_replays()}
+
+
+@app.get("/replay/{name}")
+def get_replay(name: str) -> dict:
+    """The whole archive at once (no pacing) for transcript-style views.
+    Same omniscient records the replay socket streams."""
+    try:
+        return {"records": load_replay(name)}
+    except FileNotFoundError:
+        return {"records": [], "error": f"unknown replay: {name}"}
+
+
+@app.get("/games")
+def get_games(
+    model: str | None = None,
+    game: str | None = None,
+    kind: str | None = None,
+    winner_model: str | None = None,
+    team: str | None = None,
+    moment: str | None = None,
+    word: str | None = None,
+    limit: int = 50,
+) -> dict:
+    return games.search(
+        REPLAY_DIR,
+        model=model,
+        game=game,
+        kind=kind,
+        winner_model=winner_model,
+        team=team,
+        moment=moment,
+        word=word,
+        limit=limit,
+    )
 
 
 @app.get("/leaderboard")
